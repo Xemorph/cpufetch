@@ -1,0 +1,635 @@
+# forLinux, forDarwin, forSub_Windows, forWindows:
+# Shorthand for 'variable definitions for Linux only' etc. Use like:
+#    define forLinux
+#      cflags += -DLINUX
+#      class.sources += linuxthing.c
+#    endef
+
+
+# GNU make version 3.81 (2006) or higher is required because of the following:
+# - function 'info'
+# - variable '.DEFAULT_GOAL'
+
+# force exit when make version is < 3.81
+ifneq ($(firstword $(sort 3.81 $(MAKE_VERSION))), 3.81)
+$(error GNU make version 3.81 or higher is required)
+endif
+
+#
+# The following codes used in macro 'colour_msg' assumes you have
+# MSys/Cygwin's echo with colour support.
+#
+LIGHT_RED    = \e[1;31m
+LIGHT_GREEN  = \e[1;32m
+LIGHT_YELLOW = \e[1;33m
+
+colour_msg    = @echo -e "$(1)\e[0m"
+message_green = $(call colour_msg,$(LIGHT_GREEN)$(1))
+
+# Example
+# $(call message_green,$@ Okay)
+
+################################################################################
+### platform shell detection ###################################################
+################################################################################
+
+ifeq ($(OS),Windows_NT)
+	SHELL := cmd
+else
+	SHELL := /bin/bash
+endif
+
+################################################################################
+### target platform detection ##################################################
+################################################################################
+
+
+#=== target platform ===========================================================
+
+
+# PLATFORM: optional user variable to define target platform for cross
+# compilation. Redefine build tools accordingly. PLATFORM should match
+# the exact target prefix of tools present in $PATH, like x86_64-w64-mingw32,
+# x86_64-apple-darwin12 etc. Tool definitions are exported to ensure submakes
+# will get the same.
+
+ifneq ($(_PLATFORM),)
+  ifneq ($(findstring darwin, $(_PLATFORM)),)
+    export CC = $(_PLATFORM)-cc
+    export CXX = $(_PLATFORM)-c++
+    export CPP = $(_PLATFORM)-cc
+	  export ASM = $(_PLATFORM)-cc
+  endif
+  ifneq ($(findstring windows, $(_PLATFORM)),)
+    export CC = cl
+    export CXX = cl
+    export CPP = cl
+	  export ASM = ml
+  else
+    export CC = $(_PLATFORM)-gcc
+    export CXX = $(_PLATFORM)-g++
+    export CPP = $(_PLATFORM)-cpp
+	  export ASM = $(_PLATFORM)-gcc
+  endif
+  STRIP = $(_PLATFORM)-strip
+endif
+
+# Let (native or cross-) compiler report target triplet and isolate individual
+# words therein to facilitate later processing.
+
+# -dumpmachine isn't available for MSVC. Let's use our custom ones
+ifneq ($(findstring windows, $(_PLATFORM)),)
+  target.triplet := $(subst -, ,$(_PLATFORM))
+else
+  target.triplet := $(subst -, ,$(shell $(CC) -dumpmachine))
+endif
+
+
+#=== operating system ==========================================================
+
+
+# The following systems are defined: Linux, Darwin, Sub_Windows, Windows. GNU and
+# GNU/kFreeBSD are treated as Linux to get the same options.
+system := Undefined
+
+ifneq ($(filter linux gnu% kfreebsd, $(target.triplet)),)
+  system := Linux
+endif
+
+ifneq ($(filter darwin%, $(target.triplet)),)
+  system := Darwin
+endif
+
+ifneq ($(filter mingw% cygwin%, $(target.triplet)),)
+  system := Sub_Windows
+endif
+
+ifneq ($(filter msvc msvc%, $(target.triplet)),)
+  system := Windows
+endif
+
+# evaluate possible system-specific multiline defines from library makefile
+$(eval $(for$(system)))
+
+
+# TODO: Cygwin, Android
+
+
+#=== architecture ==============================================================
+
+
+# The following CPU names can be processed by pdlibbuilder:
+# i*86    Intel 32 bit
+# x86_64  Intel 64 bit
+# arm     ARM 32 bit
+# aarch64 ARM 64 bit
+
+target.arch := $(firstword $(target.triplet))
+
+################################################################################
+### variables per platform #####################################################
+################################################################################
+
+
+#=== flags per architecture ====================================================
+
+
+# Set architecture-dependent cflags, mainly for Linux. For Mac and Windows,
+# arch.c.flags are overriden below. To see gcc's default architecture flags:
+# $ gcc -Q --help=target
+
+# ARMv6: Raspberry Pi 1st gen, not detectable from target.arch
+# ifeq ($(shell uname), armv6l)
+#  arch.c.flags = -march=armv6 -mfpu=vfp -mfloat-abi=hard
+
+# ARMv7: Beagle, Udoo, RPi2 etc.
+ifeq ($(target.arch), arm)
+  arch.c.flags = -march=armv7-a -mfpu=vfpv3 -mfloat-abi=hard
+
+# ARMv8 64 bit, not tested yet
+else ifeq ($(target.arch), aarch64)
+  arch.c.flags = -mcpu=cortex-a53
+
+# Intel 32 bit, build with SSE and SSE2 instructions
+else ifneq ($(filter i%86, $(target.arch)),)
+  arch.c.flags = /c /MACHINE:X86
+
+# Intel/AMD 64 bit, build with SSE, SSE2 and SSE3 instructions
+else ifeq ($(target.arch), x86_64)
+  arch.c.flags = /c /MACHINE:X64
+
+# if none of the above architectures detected
+else
+  arch.c.flags =
+$(warning Unsupported arch detected: $(target.arch). See https://github.com/Dr-Noob/cpufetch#1-support)
+$(warning If your architecture is supported but the compilation fails, please open an issue in https://github.com/Dr-Noob/cpufetch/issues)
+$(error Aborting compilation)
+endif
+
+#=== flags and paths for Linux =================================================
+
+
+ifeq ($(system), Linux)
+  suffix = o
+  prefix = -
+  output=o 
+  output_obj=$(output)
+
+  arch.c.flags := $(addprefix -arch , $(arch)) $(version.flag)
+  arch.ld.flags := $(arch.c.flags)
+endif
+
+
+#=== flags and paths for Darwin ================================================
+
+
+ifeq ($(system), Darwin)
+  suffix = o
+  prefix = -
+  output=o 
+  output_obj=$(output)
+endif
+
+
+#=== flags and paths for Sub-Windows ===========================================
+
+
+ifeq ($(system), Sub_Windows)
+endif
+
+
+#=== flags and paths for Windows ===============================================
+
+
+ifeq ($(system), Windows)
+  ifeq ($(target.arch), i686)
+     ASM = ml
+	 arch = X86
+  else ifeq ($(target.arch), x86_64)
+     ASM = ml64
+	 arch = X64
+  else
+    ASM = ml
+	arch = X86
+  endif
+  extension = exe
+  suffix = obj
+  prefix = /
+  output=OUT:
+  output_obj=Fo
+
+  optimization.flags = /O2
+  warn.flags = /Wall /W4
+
+  asm.flags := /c
+  c.flags := /std:c17 /TC /DARCH_X86
+  c.ldflags := /link
+  #arch.c.flags := $(addprefix /MACHINE:, $(arch))
+  arch.ld.flags := $(addprefix /MACHINE:, $(arch))
+endif
+
+
+
+#=== accumulated build flags ===================================================
+
+
+# From GNU make docs: 'Users expect to be able to specify CFLAGS freely
+# themselves.' So we use CFLAGS to define options which  are not strictly
+# required for compilation: optimizations, architecture specifications, and
+# warnings. CFLAGS can be safely overriden using a make command argument.
+# Variables cflags, ldflags and ldlibs may be defined in including makefile.
+
+# optimization.flags =
+# warn.flags =
+
+CFLAGS = $(warn.flags) $(optimization.flags) $(arch.c.flags)
+
+# preprocessor flags
+cpp.flags :=
+
+# flags for dependency checking (cflags from makefile may define -I options)
+depcheck.flags := $(cpp.flags) $(cflags)
+
+# architecture specifications for linker are overridable by LDFLAGS
+LDFLAGS := $(arch.ld.flags)
+
+# accumulated flags for C compiler / linker
+c.flags := $(cpp.flags) $(c.flags) $(cflags) $(CFLAGS)
+c.ldflags := $(c.ldflags) $(ldflags) $(LDFLAGS)
+
+
+
+################################################################################
+### variables: library name and version ########################################
+################################################################################
+
+
+# strip possibles spaces from lib.name, they mess up calculated file names
+lib.name := $(strip $(lib.name))
+
+
+
+################################################################################
+### variables: files ###########################################################
+################################################################################
+
+
+#=== sources ===================================================================
+
+
+# (re)define <classname>.class.sources using file names in class.sources
+
+define add-class-source
+$(notdir $(basename $v)).class.sources += $v
+endef
+
+$(foreach v, $(class.sources), $(eval $(add-class-source)))
+
+# derive class names from <classname>.class.sources variables
+sourcevariables := $(filter %.class.sources, $(.VARIABLES))
+classes := $(basename $(basename $(sourcevariables)))
+
+# accumulate all source files specified in makefile
+classes.sources := $(sort $(foreach v, $(sourcevariables), $($v)))
+all.sources := $(common.sources) \
+  $(classes.sources) $(shared.sources)
+
+
+#=== object files ==============================================================
+
+
+# construct object filenames from all C and C++ source file names
+classes.objects := $(addsuffix .$(suffix), $(basename $(classes.sources)))
+common.objects := $(addsuffix .$(suffix), $(basename $(common.sources)))
+shared.objects := $(addsuffix .$(suffix), $(basename $(shared.sources)))
+all.objects = $(common.objects) $(classes.objects) $(shared.objects)
+
+
+#=== executables ===============================================================
+
+
+# construct class executable names from class names
+classes.executables := $(addsuffix .$(extension), $(classes))
+
+# Construct shared lib executable name if shared sources are defined. If
+# extension and shared extension are not identical, use both to facilitate co-
+# installation for different platforms, like .m_i386.dll and .m_amd64.dll.
+ifdef shared.sources
+  ifeq ($(extension), $(shared.extension))
+    shared.lib = lib$(lib.name).$(shared.extension)
+  else
+    shared.lib = lib$(lib.name).$(extension).$(shared.extension)
+  endif
+else
+  shared.lib :=
+endif
+
+
+
+
+################################################################################
+### variables: tools ###########################################################
+################################################################################
+
+
+# aliases so we can later define 'compile-$1' and set 'c' or 'cxx' as argument
+compile-c := $(CC)
+compile-cxx := $(CXX)
+asm-c := $(ASM)
+link-c := link
+ifneq ($(OS),Windows_NT)
+  link-c := $(CC)
+endif
+
+
+################################################################################
+### checks #####################################################################
+################################################################################
+
+
+# At this point most variables are defined. Now do some checks and info's
+# before rules begin.
+
+# print Makefile.cpufetch version before possible termination
+$(info ++++ info: using Makefile.cpufetch version $(version))
+
+# Terminate if target triplet remained empty, to avoid all sorts of confusing
+# scenarios and spurious bugs.
+ifeq ($(target.triplet),)
+  $(error Command "$(CC) -dumpmachine" did not return a target triplet, \
+  needed for a build. \
+  Is compiler "$(CC)" installed in your PATH? ($(PATH)). \
+  Does compiler "$(CC)" support option "-dumpmachine"?)
+endif
+
+# 'forward declaration' of default target, needed to do checks
+all:
+
+# To avoid unpredictable results, make sure the default target is not redefined
+# by including makefile.
+ifneq ($(.DEFAULT_GOAL), all)
+  $(error Default target must be 'all'.)
+endif
+
+# find out which target(s) will be made
+ifdef MAKECMDGOALS
+  goals := $(MAKECMDGOALS)
+else
+  goals := all
+endif
+
+
+#=== define executables ========================================================
+
+
+# By default we build class executables, and optionally a shared dynamic link
+# lib. When make-lib-executable=yes we build all classes into a single lib
+# executable, on the condition that variable lib.setup.sources is defined.
+
+ifeq ($(make-lib-executable),yes)
+  executables := $(lib.name).$(extension)
+else
+  executables := $(classes.executables)
+endif
+
+
+################################################################################
+### rules: build targets #######################################################
+################################################################################
+
+
+# Target all forces the build of targets [$(executables) post] in
+# deterministic order. Target $(executables) builds class executables plus
+# optional shared lib or alternatively a single lib executable when
+# make-lib-executable=true. Target post is optionally defined by
+# library makefile.
+
+all: post
+post: $(executables)
+
+
+#=== class executable ==========================================================
+
+
+# recipe for linking objects in class executable
+# argument $1 = compiler type (c or cxx)
+# argument $2 = class basename
+define link-class
+  $(link-$1) \
+  $($1.ldflags) $($2.class.ldflags) \
+  $(prefix)$(output)$2.$(extension) \
+  $(addsuffix .$(suffix), $(basename $(common.sources))) \
+  $(addsuffix .$(suffix), $(basename $($2.class.sources))) \
+  $($1.ldlibs) $($2.class.ldlibs) $(shared.lib)
+endef
+
+# general rule for linking object files in class executable
+%.$(extension): $(shared.lib)
+	$(info ++++ info: linking objects in $@ for lib $(lib.name))
+	$(if $(filter %.cc %.cpp, $($*.class.sources)), \
+        $(call link-class,cxx,$*), \
+        $(call link-class,c,$*))
+
+
+#=== asm blob ==============================================================
+
+
+# build asm classes into objects
+build-asm: $(lib.name).$(extension)
+	$(info ++++ info: asm blob $(lib.name).$(extension) completed)
+
+#define copy-asm
+#endef
+#
+#ifeq ($(make-lib-executable),yes)
+#$(lib.name).$(extension): $(all.objects)
+#	$(if $(filter %.cc %.cpp, $(all.sources)), \
+#        $(call copy-asm,cxx), \
+#        $(call copy-asm,c))
+#endif
+
+# recipe for linking objects in lib executable
+# argument $1 = compiler type (c or cxx)
+define link-lib
+  $(link-$1) \
+  $($1.ldflags) $(lib.ldflags) \
+  $(prefix)$(output)$(lib.name).$(extension) $(all.objects) \
+  $($1.ldlibs) $(lib.ldlibs)
+endef
+
+# rule for linking objects in lib executable
+# declared conditionally to avoid name clashes
+ifeq ($(make-lib-executable),yes)
+$(lib.name).$(extension): $(all.objects)
+	$(if $(filter %.cc %.cpp, $(all.sources)), \
+        $(call link-lib,cxx), \
+        $(call link-lib,c))
+endif
+
+
+#=== shared dynamic lib ========================================================
+
+
+# recipe for linking objects in shared executable
+# argument $1 = compiler type (c or cxx)
+define link-shared
+  $(link-$1) \
+  $(shared.ldflags) \
+  $(prefix)$(output) $(shared.lib) $(shared.objects) \
+  $($1.ldlibs) $(shared.ldlibs)
+endef
+
+# rule for linking objects in shared executable
+# build recipe is in macro 'link-shared'
+$(shared.lib): $(shared.objects)
+	$(info ++++ info: linking objects in shared lib $@)
+	$(if $(filter %.cc %.cpp, $(shared.sources)), \
+        $(call link-shared,cxx), \
+        $(call link-shared,c))
+
+
+#=== object files ==============================================================
+
+
+# recipe to make .o file from source
+# argument $1 is compiler type (c or cxx)
+#-o $@ $(prefix)c $<
+define make-object-file
+  $(info ++++ info: making $@ in lib $(lib.name))
+  $(compile-$1) \
+  $($1.flags) \
+  $(prefix)$(output_obj)$@ $(prefix)c $<
+endef
+
+# Three rules to create .o files. These are double colon 'terminal' rules,
+# meaning they are the last in a rules chain.
+
+%.$(suffix):: %.c
+	$(call make-object-file,c)
+
+%.$(suffix):: %.cc
+	$(call make-object-file,cxx)
+
+%.$(suffix):: %.cpp
+	$(call make-object-file,cxx)
+
+
+#=== explicit prerequisites for class executables ==============================
+
+
+# For class executables, prerequisite rules are declared in run time. Target
+# 'depend' prints these rules for debugging purposes.
+
+# declare explicit prerequisites rule like 'class: class.extension'
+# argument $v is class basename
+define declare-class-target
+$v: $v.$(extension)
+endef
+
+# declare explicit prerequisites rule like 'class.extension: object1.o object2.o'
+# argument $v is class basename
+define declare-class-executable-target
+$v.$(extension): $(addsuffix .$(suffix), $(basename $($v.class.sources))) \
+  $(addsuffix .$(suffix), $(basename $(common.sources)))
+endef
+
+# evaluate explicit prerequisite rules for all classes
+$(foreach v, $(classes), $(eval $(declare-class-target)))
+$(foreach v, $(classes), $(eval $(declare-class-executable-target)))
+
+
+
+################################################################################
+### rules: preprocessor and assembly files #####################################
+################################################################################
+
+
+# Comment missing
+
+force:
+
+
+#=== preprocessor file =========================================================
+
+
+#=== assembly file =============================================================
+
+
+# make C / assembly interleaved output file with extension .lst
+# argument $1 = compiler type (c or cxx)
+define make-assembly-file
+  $(info ++++ info: making assembly output file $(notdir $*.asm) \
+  in current working directory)
+  $(asm-$1) \
+  $(prefix)$(output_obj)$@ $(asm.flags) $<
+endef
+
+%.$(suffix):: %.asm force
+	$(call make-assembly-file,c)
+
+
+
+################################################################################
+### rules: convenience targets #################################################
+################################################################################
+
+
+#=== show variables ============================================================
+
+
+# Several 'function' macro's cause errors when expanded within a rule or without
+# proper arguments. Variables which are set with the define directive are only
+# shown by name for that reason.
+functions = \
+add-class-source \
+declare-class-target \
+declare-class-executable-target \
+link-class \
+link-lib \
+make-object-file \
+make-assembly-file
+
+
+# show variables from makefiles
+vars:
+	$(info ++++ info: showing makefile variables:)
+	$(foreach v,\
+        $(sort $(filter-out $(functions) functions, $(.VARIABLES))),\
+        $(if $(filter file, $(origin $v)),\
+        $(info variable $v = $($v))))
+	$(foreach v, $(functions), $(info 'function' name: $v))
+	@echo
+
+# show all variables
+allvars:
+	$(info ++++ info: showing default, automatic and makefile variables:)
+	$(foreach v, \
+        $(sort $(filter-out $(functions) functions, $(.VARIABLES))), \
+        $(info variable ($(origin $v)) $v = $($v)))
+	$(foreach v, $(functions), $(info 'function' name: $v))
+	@echo
+
+#=== platform test =============================================================
+
+
+# This target can be used to test if the compiler for specified PLATFORM is
+# correctly defined and available.
+
+dumpmachine:
+	@$(CC) -dumpmachine
+
+
+#=== dummy target ==============================================================
+
+
+coffee:
+	@echo "Makefile: Can not make coffee. Sorry."
+
+
+################################################################################
+### end of rules sections ######################################################
+################################################################################
+
+
+# for syntax highlighting in vim and github
+# vim: set filetype=make:

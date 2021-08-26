@@ -160,10 +160,10 @@ struct line_buffer {
 // Writes to the line buffer the output passed in fmt
 void printOut(struct line_buffer* lbuf, int chars, const char *fmt, ...) {
   int buffer_size = 4096;
-  char buffer[buffer_size];
+  char buffer[4096];
   va_list args;
   va_start(args, fmt);
-  vsnprintf(buffer,buffer_size, fmt, args);
+  vsnprintf(buffer,4096, fmt, args);
   va_end(args);
 
   if(lbuf->pos > LINE_BUFFER_SIZE) {

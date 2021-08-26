@@ -6,7 +6,11 @@
 #include <stdint.h>
 #include <string.h>
 #include <stdbool.h>
-#include <unistd.h>
+
+#ifndef _WIN32
+  #include <unistd.h>
+#endif
+
 #include <fcntl.h>
 #include <errno.h>
 

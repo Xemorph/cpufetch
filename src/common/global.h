@@ -4,6 +4,11 @@
 #include <stdbool.h>
 #include <stddef.h>
 
+#ifdef _WIN32
+  #undef min
+  #undef max
+#endif
+
 #define STRING_UNKNOWN "Unknown"
 
 void set_log_level(bool verbose);

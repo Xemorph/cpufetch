@@ -80,7 +80,7 @@ char* get_str_cpu_name_internal() {
 
   for(int i=0; i < 3; i++) {
     eax = 0x80000002 + i;
-    cpuid(&eax, &ebx, &ecx, &edx);
+    gcpuid(&eax, &ebx, &ecx, &edx);
 
     name[c++] = eax       & MASK;
     name[c++] = (eax>>8)  & MASK;
@@ -166,7 +166,7 @@ struct uarch* get_cpu_uarch(struct cpuInfo* cpu) {
   uint32_t ecx = 0;
   uint32_t edx = 0;
 
-  cpuid(&eax, &ebx, &ecx, &edx);
+  gcpuid(&eax, &ebx, &ecx, &edx);
 
   uint32_t stepping = eax & 0xF;
   uint32_t model = (eax >> 4) & 0xF;
@@ -234,7 +234,7 @@ struct hypervisor* get_hp_info(bool hv_present) {
   uint32_t ecx = 0;
   uint32_t edx = 0;
 
-  cpuid(&eax, &ebx, &ecx, &edx);
+  gcpuid(&eax, &ebx, &ecx, &edx);
 
   char name[13];
   memset(name, 0, 13);
@@ -276,7 +276,7 @@ struct cpuInfo* get_cpu_info() {
   uint32_t edx = 0;
 
   //Get max cpuid level
-  cpuid(&eax, &ebx, &ecx, &edx);
+  gcpuid(&eax, &ebx, &ecx, &edx);
   cpu->maxLevels = eax;
 
   //Fill vendor
@@ -299,13 +299,13 @@ struct cpuInfo* get_cpu_info() {
   ebx = 0;
   ecx = 0;
   edx = 0;
-  cpuid(&eax, &ebx, &ecx, &edx);
+  gcpuid(&eax, &ebx, &ecx, &edx);
   cpu->maxExtendedLevels = eax;
 
   //Fill instructions support
   if (cpu->maxLevels >= 0x00000001){
     eax = 0x00000001;
-    cpuid(&eax, &ebx, &ecx, &edx);
+    gcpuid(&eax, &ebx, &ecx, &edx);
     feat->SSE    = (edx & (1U << 25)) != 0;
     feat->SSE2   = (edx & (1U << 26)) != 0;
     feat->SSE3   = (ecx & (1U <<  0)) != 0;
@@ -330,7 +330,7 @@ struct cpuInfo* get_cpu_info() {
   if (cpu->maxLevels >= 0x00000007){
     eax = 0x00000007;
     ecx = 0x00000000;
-    cpuid(&eax, &ebx, &ecx, &edx);
+    gcpuid(&eax, &ebx, &ecx, &edx);
     feat->AVX2         = (ebx & (1U <<  5)) != 0;
     feat->SHA          = (ebx & (1U << 29)) != 0;
     feat->AVX512       = (((ebx & (1U << 16)) != 0) ||
@@ -348,7 +348,7 @@ struct cpuInfo* get_cpu_info() {
 
   if (cpu->maxExtendedLevels >= 0x80000001){
     eax = 0x80000001;
-    cpuid(&eax, &ebx, &ecx, &edx);
+    gcpuid(&eax, &ebx, &ecx, &edx);
     feat->SSE4a = (ecx & (1U <<  6)) != 0;
     feat->FMA4  = (ecx & (1U << 16)) != 0;
   }
@@ -368,7 +368,7 @@ struct cpuInfo* get_cpu_info() {
   cpu->topology_extensions = false;
   if(cpu->cpu_vendor == CPU_VENDOR_AMD && cpu->maxExtendedLevels >= 0x80000001) {
     eax = 0x80000001;
-    cpuid(&eax, &ebx, &ecx, &edx);
+    gcpuid(&eax, &ebx, &ecx, &edx);
     cpu->topology_extensions = (ecx >> 22) & 1;
   }
 
@@ -395,7 +395,7 @@ bool get_cache_topology_amd(struct cpuInfo* cpu, struct topology* topo) {
       ecx = i; // cache id
       edx = 0;
 
-      cpuid(&eax, &ebx, &ecx, &edx);
+      gcpuid(&eax, &ebx, &ecx, &edx);
 
       cache_type = eax & 0x1F;
 
@@ -500,12 +500,12 @@ struct topology* get_topology_info(struct cpuInfo* cpu, struct cache* cach) {
     case CPU_VENDOR_AMD:
       if (cpu->maxExtendedLevels >= 0x80000008) {
         eax = 0x80000008;
-        cpuid(&eax, &ebx, &ecx, &edx);
+        gcpuid(&eax, &ebx, &ecx, &edx);
         topo->logical_cores = (ecx & 0xFF) + 1;
 
         if (cpu->maxExtendedLevels >= 0x8000001E && cpu->topology_extensions) {
           eax = 0x8000001E;
-          cpuid(&eax, &ebx, &ecx, &edx);
+          gcpuid(&eax, &ebx, &ecx, &edx);
           topo->smt_supported = ((ebx >> 8) & 0x03) + 1;
         }
         else {
@@ -554,13 +554,13 @@ struct cache* get_cache_info_amd_fallback(struct cache* cach) {
   uint32_t ebx = 0;
   uint32_t ecx = 0;
   uint32_t edx = 0;
-  cpuid(&eax, &ebx, &ecx, &edx);
+  gcpuid(&eax, &ebx, &ecx, &edx);
 
   cach->L1d->size = (ecx >> 24) * 1024;
   cach->L1i->size = (edx >> 24) * 1024;
 
   eax = 0x80000006;
-  cpuid(&eax, &ebx, &ecx, &edx);
+  gcpuid(&eax, &ebx, &ecx, &edx);
 
   cach->L2->size = (ecx >> 16) * 1024;
   cach->L3->size = (edx >> 18) * 512 * 1024;
@@ -592,7 +592,7 @@ struct cache* get_cache_info_general(struct cache* cach, uint32_t level) {
     ecx = i; // cache id
     edx = 0;
 
-    cpuid(&eax, &ebx, &ecx, &edx);
+    gcpuid(&eax, &ebx, &ecx, &edx);
 
     cache_type = eax & 0x1F;
 
@@ -717,7 +717,7 @@ struct frequency* get_frequency_info(struct cpuInfo* cpu) {
     uint32_t ecx = 0;
     uint32_t edx = 0;
 
-    cpuid(&eax, &ebx, &ecx, &edx);
+    gcpuid(&eax, &ebx, &ecx, &edx);
 
     freq->base = eax;
     freq->max = ebx;
@@ -860,7 +860,7 @@ void print_debug(struct cpuInfo* cpu) {
   uint32_t ecx = 0;
   uint32_t edx = 0;
 
-  cpuid(&eax, &ebx, &ecx, &edx);
+  gcpuid(&eax, &ebx, &ecx, &edx);
 
   printf("%s\n", cpu->cpu_name);
   if(cpu->hv->present) {
@@ -904,7 +904,7 @@ void print_raw(struct cpuInfo* cpu) {
           ecx = reg2;
           edx = 0;
 
-          cpuid(&eax, &ebx, &ecx, &edx);
+          gcpuid(&eax, &ebx, &ecx, &edx);
 
           printf("  0x%.8X 0x%.2X: 0x%.8X 0x%.8X 0x%.8X 0x%.8X\n", reg, reg2, eax, ebx, ecx, edx);
         }
@@ -916,7 +916,7 @@ void print_raw(struct cpuInfo* cpu) {
           ecx = reg2;
           edx = 0;
 
-          cpuid(&eax, &ebx, &ecx, &edx);
+          gcpuid(&eax, &ebx, &ecx, &edx);
 
           printf("  0x%.8X 0x%.2X: 0x%.8X 0x%.8X 0x%.8X 0x%.8X\n", reg, reg2, eax, ebx, ecx, edx);
         }
@@ -927,7 +927,7 @@ void print_raw(struct cpuInfo* cpu) {
         ecx = 0;
         edx = 0;
 
-        cpuid(&eax, &ebx, &ecx, &edx);
+        gcpuid(&eax, &ebx, &ecx, &edx);
 
         printf("  0x%.8X 0x%.2X: 0x%.8X 0x%.8X 0x%.8X 0x%.8X\n", reg, 0x00, eax, ebx, ecx, edx);
       }
@@ -940,7 +940,7 @@ void print_raw(struct cpuInfo* cpu) {
           ecx = reg2;
           edx = 0;
 
-          cpuid(&eax, &ebx, &ecx, &edx);
+          gcpuid(&eax, &ebx, &ecx, &edx);
 
           printf("  0x%.8X 0x%.2X: 0x%.8X 0x%.8X 0x%.8X 0x%.8X\n", reg, reg2, eax, ebx, ecx, edx);
         }
@@ -951,7 +951,7 @@ void print_raw(struct cpuInfo* cpu) {
         ecx = 0;
         edx = 0;
 
-        cpuid(&eax, &ebx, &ecx, &edx);
+        gcpuid(&eax, &ebx, &ecx, &edx);
 
         printf("  0x%.8X 0x%.2X: 0x%.8X 0x%.8X 0x%.8X 0x%.8X\n", reg, 0x00, eax, ebx, ecx, edx);
       }

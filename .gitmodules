@@ -1,0 +1,3 @@
+[submodule "cpufetch_asm"]
+	path = cpufetch_asm
+	url = https://github.com/Xemorph/cpufetch-asm

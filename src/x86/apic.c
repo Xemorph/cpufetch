@@ -15,7 +15,11 @@
 #include <stdint.h>
 #include <string.h>
 #include <stdio.h>
-#include <unistd.h>
+
+#ifndef _WIN32
+  #include <unistd.h>
+#endif
+
 #include <errno.h>
 
 #include "apic.h"
@@ -64,12 +68,12 @@ uint32_t get_apic_id(bool x2apic_id) {
 
   if(x2apic_id) {
     eax = 0x0000000B;
-    cpuid(&eax, &ebx, &ecx, &edx);
+    gcpuid(&eax, &ebx, &ecx, &edx);
     return edx;
   }
   else {
     eax = 0x00000001;
-    cpuid(&eax, &ebx, &ecx, &edx);
+    gcpuid(&eax, &ebx, &ecx, &edx);
     return (ebx >> 24);
   }
 }
@@ -111,13 +115,13 @@ bool fill_topo_masks_apic(struct topology* topo) {
   uint32_t core_id_max_cnt;
   uint32_t smt_id_per_core_max_cnt;
 
-  cpuid(&eax, &ebx, &ecx, &edx);
+  gcpuid(&eax, &ebx, &ecx, &edx);
 
   core_plus_smt_id_max_cnt = (ebx >> 16) & 0xFF;
 
   eax = 0x00000004;
   ecx = 0;
-  cpuid(&eax, &ebx, &ecx, &edx);
+  gcpuid(&eax, &ebx, &ecx, &edx);
 
   core_id_max_cnt = (eax >> 26) + 1;
   smt_id_per_core_max_cnt = core_plus_smt_id_max_cnt / core_id_max_cnt;
@@ -148,7 +152,7 @@ bool fill_topo_masks_x2apic(struct topology* topo) {
   while(true) {
     eax = 0x0000000B;
     ecx = i;
-    cpuid(&eax, &ebx, &ecx, &edx);
+    gcpuid(&eax, &ebx, &ecx, &edx);
     if(ebx == 0) break;
 
     level_type = (ecx >> 8) & 0xFF;
@@ -265,7 +269,7 @@ void get_cache_topology_from_apic(struct topology* topo) {
     eax = 0x00000004;
     ecx = i;
 
-    cpuid(&eax, &ebx, &ecx, &edx);
+    gcpuid(&eax, &ebx, &ecx, &edx);
 
     uint32_t SMTMaxCntPerEachCache = ((eax >> 14) & 0x7FF) + 1;
     uint32_t dummy;
@@ -340,7 +344,7 @@ bool get_topology_from_apic(struct cpuInfo* cpu, struct topology* topo) {
     uint32_t ecx = 0;
     uint32_t edx = 0;
 
-    cpuid(&eax, &ebx, &ecx, &edx);
+    gcpuid(&eax, &ebx, &ecx, &edx);
 
     if(ebx == 0) x2apic_id = false;
     else x2apic_id = true;

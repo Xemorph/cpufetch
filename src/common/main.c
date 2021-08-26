@@ -2,6 +2,10 @@
 #include <stdlib.h>
 #include <string.h>
 
+#ifdef _WIN32
+  #define NOMINMAX
+#endif
+
 #include "args.h"
 #include "printer.h"
 #include "global.h"

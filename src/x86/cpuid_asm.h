@@ -3,6 +3,6 @@
 
 #include <stdint.h>
 
-void cpuid(uint32_t *eax, uint32_t *ebx, uint32_t *ecx, uint32_t *edx);
+void gcpuid(uint32_t *eax, uint32_t *ebx, uint32_t *ecx, uint32_t *edx);
 
 #endif

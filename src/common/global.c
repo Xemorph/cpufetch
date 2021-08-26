@@ -30,10 +30,10 @@ int LOG_LEVEL;
 void printWarn(const char *fmt, ...) {
   if(LOG_LEVEL == LOG_LEVEL_VERBOSE) {
     int buffer_size = 4096;
-    char buffer[buffer_size];
+    char buffer[4096];
     va_list args;
     va_start(args, fmt);
-    vsnprintf(buffer,buffer_size, fmt, args);
+    vsnprintf(buffer,4096, fmt, args);
     va_end(args);
     fprintf(stderr,BOLD "[WARNING]: "RESET "%s\n",buffer);
   }
@@ -41,20 +41,20 @@ void printWarn(const char *fmt, ...) {
 
 void printErr(const char *fmt, ...) {
   int buffer_size = 4096;
-  char buffer[buffer_size];
+  char buffer[4096];
   va_list args;
   va_start(args, fmt);
-  vsnprintf(buffer,buffer_size, fmt, args);
+  vsnprintf(buffer,4096, fmt, args);
   va_end(args);
   fprintf(stderr,RED "[ERROR]: "RESET "%s\n",buffer);
 }
 
 void printBug(const char *fmt, ...) {
   int buffer_size = 4096;
-  char buffer[buffer_size];
+  char buffer[4096];
   va_list args;
   va_start(args, fmt);
-  vsnprintf(buffer,buffer_size, fmt, args);
+  vsnprintf(buffer,4096, fmt, args);
   va_end(args);
   fprintf(stderr,RED "[ERROR]: "RESET "%s\n",buffer);
 #if defined(ARCH_X86) || defined(ARCH_PPC)
